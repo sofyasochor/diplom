@@ -26,6 +26,12 @@ def send_message(user_id, message, attachment=None):
     vk.method('messages.send', params)
 
 
+def get_info_user(user_id):
+    data = vk_new.method('users.get', {'access_token': token_application, 'user_ids': user_id,
+                                       'fields': "sex, city, status, age"})
+    return data
+
+
 def get_status(status):
     if status.lower() in "не женат (не замужем)":
         return 1
@@ -70,6 +76,10 @@ offset = -50
 
 
 def main():
+    flag = False
+    info_search = {}
+    fields = ["sex", "status", "city", "age", "name"]
+    input_field = None
     create_table()
     for event in longpoll.listen():
         if event.type == VkEventType.MESSAGE_NEW:
@@ -77,16 +87,18 @@ def main():
             if event.to_me:
                 request = event.text
 
-                if request.isnumeric():
-                    ...
-
-                else:
+                if flag:
                     arsg = request.split(",")
-                    name = arsg[0].strip()
-                    age = int(arsg[1].strip())
-                    sex = get_sex(arsg[2].strip())
-                    city = arsg[3].strip()
-                    status = get_status(arsg[4].strip())
+
+                    if input_field != None:
+                        for i, field in enumerate(input_field):
+                            info_search[field] = arsg[i]
+
+                    name = info_search.get('name').strip()
+                    age = int(str(info_search.get('age')).strip())
+                    sex = get_sex(str(info_search.get('sex')).strip())
+                    city = info_search.get('city').strip()
+                    status = get_status(info_search.get('status').strip())
 
                     global data
                     response = None
@@ -97,9 +109,11 @@ def main():
                         offset += 50
 
                         data = vk_new.method('users.search', {'offset': offset,
-                            'access_token': token_application, 'q': name, 'count': 50, 'hometown': city, 'sex': sex,
-                            'age_to': age, 'status': status, 'fields': "about, city, sex, crop_photo, domain"
-                        })
+                                                              'access_token': token_application, 'q': name, 'count': 50,
+                                                              'hometown': city, 'sex': sex,
+                                                              'age_to': age, 'status': status,
+                                                              'fields': "about, city, sex, crop_photo, domain"
+                                                              })
 
                     for item in data['items'].copy():
                         if item.get('crop_photo') is None:
@@ -130,6 +144,52 @@ def main():
 
                     send_message(event.user_id, "аватарка", attachment=attachment)
                     insert_table(id_)
+                    flag = False
+
+                else:
+                    user_data = get_info_user(event.user_id)
+                    user_data = user_data[0]
+
+                    try:
+                        city = user_data['city']['title']
+                        info_search['city'] = city
+                    except KeyError:
+                        ...
+
+                    try:
+                        status = user_data['status']
+
+                        if status != "":
+                            info_search['status'] = status
+
+                    except KeyError:
+                        ...
+
+                    try:
+                        sex = user_data['sex']
+
+                        if sex == 2:
+                            sex = 1
+                            info_search['sex'] = sex
+                        elif sex == 1:
+                            sex = 2
+                            info_search['sex'] = sex
+
+                    except KeyError:
+                        ...
+
+                    s = "Введите недостающие поля через запятую: "
+                    f = fields.copy()
+
+                    for field in f.copy():
+                        if field not in info_search:
+                            s += field + " "
+                        else:
+                            f.remove(field)
+
+                    flag = True
+                    input_field = f
+                    send_message(event.user_id, s)
 
 
 if __name__ == "__main__":
