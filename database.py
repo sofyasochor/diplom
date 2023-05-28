@@ -42,3 +42,4 @@ def user_in_table(id_):
 
 if __name__ == "__main__":
     create_table()
+
